@@ -70,14 +70,22 @@ else:
 
 st.sidebar.write(f"**a = {a}**, **b = {b}**")
 
-# ==================== CALCULATIONS ====================
+# ==================== UPDATED CALCULATION ====================
 irradiance = np.arange(50, 1001, 50)
 
 def calculate(Ee):
-    Tc = Tamb + (Ee / 1000) * np.exp(a + b * WS) + 2.0
+    # Module back-surface temperature
+    Tm = Tamb + (Ee / 1000) * np.exp(a + b * WS)
+    
+    # Cell temperature - now irradiance dependent
+    delta_T = 2.0 * (Ee / 1000)          # 2.0°C at 1000 W/m²
+    Tc = Tm + delta_T
+    
+    # Voc calculation
     Ee_norm = Ee / 1000.0
     delta = 1.0 * (1.380649e-23 / 1.60217662e-19) * (Tc + 273.15)
     Voc_mod = Voc0 + Ns * delta * np.log(Ee_norm) + beta_voc * (Tc - 25)
+    
     return round(Tc, 2), round(Voc_mod, 2)
 
 results = []
@@ -125,7 +133,7 @@ with col2:
     fig2 = px.line(df, x="Irradiance (W/m²)", y="String Voc (V)", title="String Voc vs Irradiance", markers=True, color_discrete_sequence=["red"])
     st.plotly_chart(fig2, use_container_width=True)
 
-# ==================== MODEL DESCRIPTION (NEW) ====================
+# ==================== MODEL DESCRIPTION (UPDATED) ====================
 st.markdown("---")
 with st.expander("📘 Model Description, Equations & Assumptions", expanded=False):
 
@@ -135,17 +143,15 @@ with st.expander("📘 Model Description, Equations & Assumptions", expanded=Fal
     T_m = T_{amb} + \frac{E_e}{1000} \cdot \exp(a + b \cdot WS)
     """)
 
-    st.markdown("""
-    Where:
-    - $T_m$ = Module back-surface temperature (°C)
-    - $T_{amb}$ = Ambient air temperature (°C)
-    - $E_e$ = Plane-of-array irradiance (W/m²)
-    - $WS$ = Wind speed (m/s)
-    - $a$, $b$ = Empirical coefficients depending on mounting type
+    st.markdown("**Cell temperature** is now calculated as:")
+    st.latex(r"""
+    T_c = T_m + \Delta T_0 \cdot \frac{E_e}{1000}
     """)
 
-    st.markdown("**Cell temperature** is calculated as:")
-    st.latex(r"T_c = T_m + 2^\circ C")
+    st.markdown("""
+    Where $\Delta T_0 = 2.0^\circ C$ (temperature rise at 1000 W/m²).  
+    This makes the cell-to-module temperature difference **irradiance-dependent**, which is more physically accurate.
+    """)
 
     st.markdown("**Source:** [pvlib.temperature.sapm_module](https://pvlib-python.readthedocs.io/en/stable/reference/generated/pvlib.temperature.sapm_module.html)")
 
@@ -155,40 +161,31 @@ with st.expander("📘 Model Description, Equations & Assumptions", expanded=Fal
     V_{oc} = V_{oc0} + N_s \cdot \delta \cdot \ln\left(\frac{E_e}{1000}\right) + \beta_{Voc} \cdot (T_c - 25)
     """)
 
-    st.markdown("""
-    Where:
-    - $V_{oc0}$ = Open-circuit voltage at Standard Test Conditions (STC)
-    - $N_s$ = Number of cells in series
-    - $\delta = n \cdot k \cdot (T_c + 273.15) / q$
-    - $\beta_{Voc}$ = Temperature coefficient of Voc (V/°C)
-    - $n = 1.0$ (diode ideality factor – common engineering assumption)
-    """)
-
     st.markdown("**Source:** [pvlib.pvsystem.sapm](https://pvlib-python.readthedocs.io/en/stable/reference/generated/pvlib.pvsystem.sapm.html)")
 
-    st.markdown("### 3. Key Assumptions Used in This Dashboard")
+    st.markdown("### 3. Key Assumptions & Justifications")
 
     assumptions = {
         "Parameter": [
             "Diode ideality factor (n)",
-            "Cell vs Module temperature difference",
+            "Cell vs Module ΔT at 1000 W/m²",
             "Temperature model coefficients (a, b)",
-            "Wind speed for conservative calculation",
+            "Wind speed assumption",
             "Irradiance range"
         ],
         "Value": [
             "1.0",
-            "+2 °C",
+            "2.0 °C (irradiance dependent)",
             "Open Rack: a = -3.56, b = -0.075\nGlass/Glass: a = -3.47, b = -0.0594",
-            "1.0 m/s (user adjustable)",
-            "50 – 1000 W/m² (step 50)"
+            "1.0 m/s (adjustable)",
+            "50 – 1000 W/m²"
         ],
         "Justification": [
-            "Standard simplification in Sandia Voc calculations for string sizing",
-            "Common engineering assumption for glass/polymer and glass/glass modules",
-            "Recommended values from pvlib for ground-mounted single-axis trackers",
-            "Conservative low-wind assumption for cold temperature Voc",
-            "Covers typical operating range for string sizing"
+            "Standard engineering assumption in Sandia Voc calculations",
+            "Reasonable value for glass/glass bifacial modules. Makes ΔT vary with irradiance (more accurate than fixed offset)",
+            "Recommended pvlib values for ground-mounted single-axis trackers",
+            "Conservative low-wind condition for cold-temperature Voc sizing",
+            "Covers typical range for string voltage analysis"
         ]
     }
 
@@ -198,7 +195,7 @@ with st.expander("📘 Model Description, Equations & Assumptions", expanded=Fal
     **Primary References:**
     - [pvlib-python Documentation](https://pvlib-python.readthedocs.io/)
     - Sandia National Laboratories – *Photovoltaic Array Performance Model* (SAND2004-3535)
-    - King et al., *Sandia Array Performance Model*, 2004
+    - King et al. (2004), *Sandia Array Performance Model*
     """)
 
-st.caption("Sandia SAPM Model | n = 1.0 | Supports .PAN upload + Excel/CSV export")
+st.caption("Sandia SAPM | n = 1.0 | Irradiance-dependent cell temperature | Supports .PAN upload + Excel/CSV export")
