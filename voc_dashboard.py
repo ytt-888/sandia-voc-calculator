@@ -7,7 +7,7 @@ from io import BytesIO
 st.set_page_config(page_title="Voc Calculator", layout="wide")
 st.title("🌞 Voc String Calculator")
 
-# ==================== PAN PARSER ====================
+# PAN PARSER
 def parse_pan_file(uploaded_file):
     content = uploaded_file.getvalue().decode("utf-8")
     params = {}
@@ -23,7 +23,7 @@ def parse_pan_file(uploaded_file):
                 params[key] = val
     return params
 
-# ==================== SIDEBAR ====================
+# SIDEBAR
 st.sidebar.header("📁 Upload .PAN File (optional)")
 uploaded_file = st.sidebar.file_uploader("Upload .PAN file", type=["pan", "PAN", "txt"])
 
@@ -32,7 +32,7 @@ if uploaded_file:
     pan_params = parse_pan_file(uploaded_file)
     st.sidebar.success("PAN loaded successfully!")
 
-# ==================== MODEL SELECTOR (TOP) ====================
+# MODEL SELECTOR AT TOP
 st.sidebar.header("Calculation Model")
 model_choice = st.sidebar.selectbox(
     "Select model",
@@ -40,7 +40,7 @@ model_choice = st.sidebar.selectbox(
     index=0
 )
 
-# ==================== CONDITIONAL SIDEBAR ====================
+# CONDITIONAL SIDEBAR
 if model_choice == "Sandia SAPM Model":
     st.sidebar.header("Module Parameters")
     default_Voc0 = pan_params.get("Voc", 48.90)
@@ -77,7 +77,6 @@ if model_choice == "Sandia SAPM Model":
     modules_in_string = st.sidebar.number_input("Modules per String", value=29)
 
 else:
-    # Simple model - minimal parameters
     st.sidebar.header("Module Parameters")
     default_Voc0 = pan_params.get("Voc", 48.90)
     default_muVoc = pan_params.get("muVocSpec")
@@ -100,9 +99,8 @@ else:
     )
     modules_in_string = st.sidebar.number_input("Modules per String", value=29)
 
-# ==================== MAIN CONTENT ====================
+# MAIN CONTENT
 if model_choice == "Sandia SAPM Model":
-    # SANDIA FULL VERSION
     st.subheader("📊 Sandia SAPM Model Results")
 
     irradiance = np.arange(50, 1001, 50)
@@ -141,11 +139,9 @@ if model_choice == "Sandia SAPM Model":
         st.plotly_chart(fig2, use_container_width=True)
 
 else:
-    # SIMPLE TEMPERATURE CORRECTION (CORRECTED)
     st.subheader("📊 Simple Temperature Correction Model")
 
     Tc_fixed = design_low_temp
-    # Correct additive formula
     Voc_module = Voc0 + beta_voc * (Tc_fixed - 25)
     Voc_string = Voc_module * modules_in_string
 
@@ -164,18 +160,82 @@ else:
     }
     st.table(pd.DataFrame(ref))
 
-# ==================== DYNAMIC DESCRIPTION ====================
+# DYNAMIC DESCRIPTION (FULL VERSION RESTORED)
 st.markdown("---")
 with st.expander("📘 Model Description & Equations", expanded=False):
 
     if model_choice == "Sandia SAPM Model":
-        st.markdown("### Sandia SAPM Model")
-        st.latex(r"V_{oc} = V_{oc0} + N_s \cdot \delta \cdot \ln\left(\frac{E_e}{1000}\right) + \beta_{Voc} \cdot (T_c - 25)")
-        st.markdown("Full empirical model including both irradiance and temperature effects.")
+        st.markdown("### 1. Cell Temperature Model (Sandia SAPM)")
+
+        st.latex(r"""
+        T_m = T_{amb} + \frac{E_e}{1000} \cdot \exp(a + b \cdot WS)
+        """)
+
+        st.markdown("**Cell temperature** (irradiance-dependent):")
+
+        st.latex(r"""
+        T_c = T_m + \Delta T_0 \cdot \frac{E_e}{1000}
+        """)
+
+        st.markdown("""
+        Where:
+        - \( \Delta T_0 = 2.0^\circ C \) = cell-to-module temperature difference at 1000 W/m²  
+        - This makes the temperature difference between the cell and the back surface of the module **vary with irradiance**, which is more physically accurate.
+        """)
+
+        st.markdown("**Source:** [pvlib.temperature.sapm_module](https://pvlib-python.readthedocs.io/en/stable/reference/generated/pvlib.temperature.sapm_module.html)")
+
+        st.markdown("### 2. Open-Circuit Voltage Model (Sandia SAPM)")
+
+        st.latex(r"""
+        V_{oc} = V_{oc0} + N_s \cdot \delta \cdot \ln\left(\frac{E_e}{1000}\right) + \beta_{Voc} \cdot (T_c - 25)
+        """)
+
+        st.markdown("Where \( \delta = n \cdot k \cdot (T_c + 273.15) / q \) and \( n = 1.0 \) (standard engineering assumption).")
+
+        st.markdown("**Source:** [pvlib.pvsystem.sapm](https://pvlib-python.readthedocs.io/en/stable/reference/generated/pvlib.pvsystem.sapm.html)")
 
     else:
         st.markdown("### Simple Temperature Correction")
-        st.latex(r"V_{oc}(T_c) = V_{oc0} + \beta_{Voc} \times (T_c - 25)")
+        st.latex(r"""
+        V_{oc}(T_c) = V_{oc0} + \beta_{Voc} \times (T_c - 25)
+        """)
         st.markdown("Standard linear temperature correction used in most string sizing guidelines.")
+
+    st.markdown("### 3. Key Assumptions & Justifications")
+
+    assumptions = {
+        "Parameter": [
+            "Diode ideality factor (n)",
+            "Cell vs Module ΔT at 1000 W/m²",
+            "Temperature model coefficients (a, b)",
+            "Wind speed for cold condition",
+            "Irradiance range"
+        ],
+        "Value": [
+            "1.0",
+            "2.0 °C (irradiance dependent)",
+            "Open Rack: a = -3.56, b = -0.075\nGlass/Glass: a = -3.47, b = -0.0594",
+            "1.0 m/s (user adjustable)",
+            "50 – 1000 W/m² (step 50)"
+        ],
+        "Justification": [
+            "Standard engineering simplification used in Sandia Voc calculations for string sizing",
+            "Reasonable value for glass/glass bifacial modules. ΔT now varies with irradiance (more accurate)",
+            "Recommended values from pvlib for ground-mounted single-axis tracker systems",
+            "Conservative low-wind assumption commonly used for cold-temperature Voc analysis",
+            "Covers typical operating range relevant for string voltage sizing"
+        ]
+    }
+
+    st.table(pd.DataFrame(assumptions))
+
+    st.markdown("""
+    **Primary References:**
+    - [pvlib-python Documentation](https://pvlib-python.readthedocs.io/)
+    - Sandia National Laboratories – *Photovoltaic Array Performance Model* (SAND2004-3535)
+    - King et al. (2004), *Sandia Array Performance Model*
+    - Standard PV string sizing practices (IEC, manufacturer guidelines)
+    """)
 
 st.caption("Two models | Fully dynamic | .PAN support | All in English")
