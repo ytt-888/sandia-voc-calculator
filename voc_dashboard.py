@@ -70,27 +70,42 @@ else:
 
 st.sidebar.write(f"**a = {a}**, **b = {b}**")
 
-# ==================== CALCULATION (Updated) ====================
+# NEW: Calculation Model dropdown
+st.sidebar.header("Calculation Model")
+model_choice = st.sidebar.selectbox(
+    "Choose calculation model",
+    options=["Sandia SAPM Model", "Simple Temperature Correction"],
+    index=0,
+    help="Sandia SAPM: Full empirical model with irradiance (ln) and temperature terms. Simple: Standard linear Voc temperature correction only."
+)
+
+st.sidebar.info("Note: Both models use the same Sandia temperature model to calculate cell temperature (Tc).")
+
+# ==================== CALCULATION (Updated with model choice) ====================
 irradiance = np.arange(50, 1001, 50)
 
-def calculate(Ee):
-    # Module back-surface temperature
+def calculate(Ee, model_choice):
+    # Module back-surface temperature (Sandia temp model - common for both)
     Tm = Tamb + (Ee / 1000) * np.exp(a + b * WS)
     
-    # Cell temperature - irradiance dependent
+    # Cell temperature - irradiance dependent (more accurate)
     delta_T = 2.0 * (Ee / 1000)          # 2.0°C at 1000 W/m²
     Tc = Tm + delta_T
     
-    # Voc calculation
-    Ee_norm = Ee / 1000.0
-    delta = 1.0 * (1.380649e-23 / 1.60217662e-19) * (Tc + 273.15)
-    Voc_mod = Voc0 + Ns * delta * np.log(Ee_norm) + beta_voc * (Tc - 25)
+    if model_choice == "Sandia SAPM Model":
+        # Full Sandia SAPM Voc equation
+        Ee_norm = Ee / 1000.0
+        delta = 1.0 * (1.380649e-23 / 1.60217662e-19) * (Tc + 273.15)
+        Voc_mod = Voc0 + Ns * delta * np.log(Ee_norm) + beta_voc * (Tc - 25)
+    else:
+        # Simple Temperature Correction model
+        Voc_mod = Voc0 * (1 + beta_voc * (Tc - 25))
     
     return round(Tc, 2), round(Voc_mod, 2)
 
 results = []
 for Ee in irradiance:
-    Tc, Voc_mod = calculate(Ee)
+    Tc, Voc_mod = calculate(Ee, model_choice)
     results.append({
         "Irradiance (W/m²)": Ee,
         "Cell Temp Tc (°C)": Tc,
@@ -100,8 +115,8 @@ for Ee in irradiance:
 
 df = pd.DataFrame(results)
 
-# ==================== RESULTS ====================
-st.subheader("📊 Results Table")
+# ==================== RESULTS (Dynamic based on model) ====================
+st.subheader(f"📊 Results Table ({model_choice})")
 st.dataframe(df, use_container_width=True, hide_index=True)
 
 max_row = df.loc[df["String Voc (V)"].idxmax()]
@@ -123,49 +138,86 @@ with col2:
     st.download_button("📥 Download Excel", output.getvalue(), "sandia_voc_results.xlsx", 
                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-# ==================== GRAPHS ====================
+# ==================== GRAPHS (Dynamic titles) ====================
 st.subheader("📈 Graphs")
 col1, col2 = st.columns(2)
 with col1:
-    fig1 = px.line(df, x="Irradiance (W/m²)", y="Cell Temp Tc (°C)", title="Cell Temperature vs Irradiance", markers=True)
+    fig1 = px.line(df, x="Irradiance (W/m²)", y="Cell Temp Tc (°C)", 
+                   title=f"Cell Temperature vs Irradiance ({model_choice})", markers=True)
     st.plotly_chart(fig1, use_container_width=True)
 with col2:
-    fig2 = px.line(df, x="Irradiance (W/m²)", y="String Voc (V)", title="String Voc vs Irradiance", markers=True, color_discrete_sequence=["red"])
+    fig2 = px.line(df, x="Irradiance (W/m²)", y="String Voc (V)", 
+                   title=f"String Voc vs Irradiance ({model_choice})", markers=True, color_discrete_sequence=["red"])
     st.plotly_chart(fig2, use_container_width=True)
 
-# ==================== MODEL DESCRIPTION (Clean & Correct) ====================
+# ==================== MODEL DESCRIPTION (Dynamic based on choice) ====================
 st.markdown("---")
 with st.expander("📘 Model Description, Equations & Assumptions", expanded=False):
 
-    st.markdown("### 1. Cell Temperature Model (Sandia SAPM)")
+    if model_choice == "Sandia SAPM Model":
+        st.markdown("### 1. Cell Temperature Model (Sandia SAPM)")
 
-    st.latex(r"""
-    T_m = T_{amb} + \frac{E_e}{1000} \cdot \exp(a + b \cdot WS)
-    """)
+        st.latex(r"""
+        T_m = T_{amb} + \frac{E_e}{1000} \cdot \exp(a + b \cdot WS)
+        """)
 
-    st.markdown("**Cell temperature** (irradiance-dependent):")
+        st.markdown("**Cell temperature** (irradiance-dependent):")
 
-    st.latex(r"""
-    T_c = T_m + \Delta T_0 \cdot \frac{E_e}{1000}
-    """)
+        st.latex(r"""
+        T_c = T_m + \Delta T_0 \cdot \frac{E_e}{1000}
+        """)
 
-    st.markdown("""
-    Where:
-    - $\Delta T_0 = 2.0^\circ C$ = cell-to-module temperature difference at 1000 W/m²  
-    - This makes the temperature difference between the cell and the back surface of the module **vary with irradiance**, which is more physically accurate.
-    """)
+        st.markdown("""
+        Where:
+        - \( \Delta T_0 = 2.0^\circ C \) = cell-to-module temperature difference at 1000 W/m²  
+        - This makes the temperature difference between the cell and the back surface of the module **vary with irradiance**, which is more physically accurate.
+        """)
 
-    st.markdown("**Source:** [pvlib.temperature.sapm_module](https://pvlib-python.readthedocs.io/en/stable/reference/generated/pvlib.temperature.sapm_module.html)")
+        st.markdown("**Source:** [pvlib.temperature.sapm_module](https://pvlib-python.readthedocs.io/en/stable/reference/generated/pvlib.temperature.sapm_module.html)")
 
-    st.markdown("### 2. Open-Circuit Voltage Model (Sandia SAPM)")
+        st.markdown("### 2. Open-Circuit Voltage Model (Sandia SAPM)")
 
-    st.latex(r"""
-    V_{oc} = V_{oc0} + N_s \cdot \delta \cdot \ln\left(\frac{E_e}{1000}\right) + \beta_{Voc} \cdot (T_c - 25)
-    """)
+        st.latex(r"""
+        V_{oc} = V_{oc0} + N_s \cdot \delta \cdot \ln\left(\frac{E_e}{1000}\right) + \beta_{Voc} \cdot (T_c - 25)
+        """)
 
-    st.markdown("Where $\delta = n \cdot k \cdot (T_c + 273.15) / q$ and $n = 1.0$.")
+        st.markdown("Where \( \delta = n \cdot k \cdot (T_c + 273.15) / q \) and \( n = 1.0 \) (standard engineering assumption).")
 
-    st.markdown("**Source:** [pvlib.pvsystem.sapm](https://pvlib-python.readthedocs.io/en/stable/reference/generated/pvlib.pvsystem.sapm.html)")
+        st.markdown("**Source:** [pvlib.pvsystem.sapm](https://pvlib-python.readthedocs.io/en/stable/reference/generated/pvlib.pvsystem.sapm.html)")
+
+    else:
+        st.markdown("### 1. Cell Temperature Model (Sandia SAPM)")
+
+        st.latex(r"""
+        T_m = T_{amb} + \frac{E_e}{1000} \cdot \exp(a + b \cdot WS)
+        """)
+
+        st.markdown("**Cell temperature** (irradiance-dependent):")
+
+        st.latex(r"""
+        T_c = T_m + \Delta T_0 \cdot \frac{E_e}{1000}
+        """)
+
+        st.markdown("""
+        Where:
+        - \( \Delta T_0 = 2.0^\circ C \) = cell-to-module temperature difference at 1000 W/m²  
+        - This makes the temperature difference between the cell and the back surface of the module **vary with irradiance**, which is more physically accurate.
+        """)
+
+        st.markdown("**Source:** [pvlib.temperature.sapm_module](https://pvlib-python.readthedocs.io/en/stable/reference/generated/pvlib.temperature.sapm_module.html)")
+
+        st.markdown("### 2. Open-Circuit Voltage Model (Simple Temperature Correction)")
+
+        st.latex(r"""
+        V_{oc}(T_c) = V_{oc0} \times (1 + \beta_{Voc} \times (T_c - 25))
+        """)
+
+        st.markdown("""
+        This is the standard linear temperature correction model commonly used in basic string sizing calculations and many engineering tools. 
+        It applies only the temperature coefficient to Voc at STC, without the additional irradiance (ln) term from the full Sandia SAPM.
+        """)
+
+        st.markdown("**Source:** Standard PV engineering practice (e.g., IEC 62548, many inverter/string sizing guidelines)")
 
     st.markdown("### 3. Key Assumptions & Justifications")
 
@@ -200,6 +252,7 @@ with st.expander("📘 Model Description, Equations & Assumptions", expanded=Fal
     - [pvlib-python Documentation](https://pvlib-python.readthedocs.io/)
     - Sandia National Laboratories – *Photovoltaic Array Performance Model* (SAND2004-3535)
     - King et al. (2004), *Sandia Array Performance Model*
+    - Standard PV string sizing practices (IEC, manufacturer guidelines)
     """)
 
-st.caption("Sandia SAPM Model | n = 1.0 | Irradiance-dependent cell temperature | Supports .PAN upload + Excel/CSV export")
+st.caption("Sandia SAPM + Simple Temp Correction | n = 1.0 | Irradiance-dependent cell temperature | Supports .PAN upload + Excel/CSV export")
