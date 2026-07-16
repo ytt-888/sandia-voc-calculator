@@ -160,7 +160,7 @@ else:
     }
     st.table(pd.DataFrame(ref))
 
-# DYNAMIC DESCRIPTION (FULL VERSION RESTORED)
+# DYNAMIC DESCRIPTION - FULL CONSISTENT STRUCTURE
 st.markdown("---")
 with st.expander("📘 Model Description & Equations", expanded=False):
 
@@ -196,11 +196,31 @@ with st.expander("📘 Model Description & Equations", expanded=False):
         st.markdown("**Source:** [pvlib.pvsystem.sapm](https://pvlib-python.readthedocs.io/en/stable/reference/generated/pvlib.pvsystem.sapm.html)")
 
     else:
-        st.markdown("### Simple Temperature Correction")
+        st.markdown("### 1. Cell Temperature Model (Sandia - used for realistic Tc)")
+
+        st.latex(r"""
+        T_m = T_{amb} + \frac{E_e}{1000} \cdot \exp(a + b \cdot WS)
+        """)
+
+        st.markdown("**Cell temperature** (irradiance-dependent):")
+
+        st.latex(r"""
+        T_c = T_m + \Delta T_0 \cdot \frac{E_e}{1000}
+        """)
+
+        st.markdown("""
+        Even in the Simple model we use the Sandia temperature model to calculate realistic cell temperature that changes with irradiance and wind.
+        """)
+
+        st.markdown("**Source:** [pvlib.temperature.sapm_module](https://pvlib-python.readthedocs.io/en/stable/reference/generated/pvlib.temperature.sapm_module.html)")
+
+        st.markdown("### 2. Open-Circuit Voltage Model (Simple Temperature Correction)")
+
         st.latex(r"""
         V_{oc}(T_c) = V_{oc0} + \beta_{Voc} \times (T_c - 25)
         """)
-        st.markdown("Standard linear temperature correction used in most string sizing guidelines.")
+
+        st.markdown("Standard linear temperature correction used in most basic string sizing calculations and manufacturer guidelines.")
 
     st.markdown("### 3. Key Assumptions & Justifications")
 
