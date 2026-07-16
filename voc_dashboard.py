@@ -30,9 +30,9 @@ uploaded_file = st.sidebar.file_uploader("Upload .PAN file", type=["pan", "PAN",
 pan_params = {}
 if uploaded_file:
     pan_params = parse_pan_file(uploaded_file)
-    st.sidebar.success("PAN loaded!")
+    st.sidebar.success("PAN loaded successfully!")
 
-# ==================== MODEL SELECTOR (САМОЕ ВЕРХНЕЕ) ====================
+# ==================== MODEL SELECTOR (TOP) ====================
 st.sidebar.header("Calculation Model")
 model_choice = st.sidebar.selectbox(
     "Select model",
@@ -42,7 +42,6 @@ model_choice = st.sidebar.selectbox(
 
 # ==================== CONDITIONAL SIDEBAR ====================
 if model_choice == "Sandia SAPM Model":
-    # Полная версия Sandia
     st.sidebar.header("Module Parameters")
     default_Voc0 = pan_params.get("Voc", 48.90)
     default_muVoc = pan_params.get("muVocSpec")
@@ -78,7 +77,7 @@ if model_choice == "Sandia SAPM Model":
     modules_in_string = st.sidebar.number_input("Modules per String", value=29)
 
 else:
-    # Простая модель - только необходимое
+    # Simple model - minimal parameters
     st.sidebar.header("Module Parameters")
     default_Voc0 = pan_params.get("Voc", 48.90)
     default_muVoc = pan_params.get("muVocSpec")
@@ -97,14 +96,14 @@ else:
         "Design Low Cell Temperature (°C)", 
         value=-10.0, 
         step=0.5,
-        help="Самая низкая ожидаемая температура ячеек для расчёта максимального Voc"
+        help="The lowest expected cell temperature used for maximum Voc calculation"
     )
     modules_in_string = st.sidebar.number_input("Modules per String", value=29)
 
-# ==================== ГЛАВНЫЙ ЭКРАН - ПОЛНОСТЬЮ ЗАВИСИТ ОТ МОДЕЛИ ====================
+# ==================== MAIN CONTENT ====================
 if model_choice == "Sandia SAPM Model":
-    # ==================== ПОЛНАЯ ВЕРСИЯ SANDIA ====================
-    st.subheader("📊 Sandia SAPM Model - Full Calculation")
+    # SANDIA FULL VERSION
+    st.subheader("📊 Sandia SAPM Model Results")
 
     irradiance = np.arange(50, 1001, 50)
 
@@ -142,49 +141,41 @@ if model_choice == "Sandia SAPM Model":
         st.plotly_chart(fig2, use_container_width=True)
 
 else:
-    # ==================== ПРОСТАЯ МОДЕЛЬ ====================
+    # SIMPLE TEMPERATURE CORRECTION (CORRECTED)
     st.subheader("📊 Simple Temperature Correction Model")
 
-    # Расчёт по фиксированной низкой температуре
     Tc_fixed = design_low_temp
-    Voc_module = Voc0 * (1 + beta_voc * (Tc_fixed - 25))
+    # Correct additive formula
+    Voc_module = Voc0 + beta_voc * (Tc_fixed - 25)
     Voc_string = Voc_module * modules_in_string
 
-    # Большой красивый результат
     st.metric(
-        label=f"String Voc при минимальной температуре ({Tc_fixed}°C)",
+        label=f"String Voc at Design Low Temperature ({Tc_fixed}°C)",
         value=f"{Voc_string:.1f} V",
-        delta=f"{Voc_module:.2f} V на модуль"
+        delta=f"{Voc_module:.2f} V per module"
     )
 
-    st.info(f"""
-    **Формула:**  
-    Voc(Tc) = Voc₀ × (1 + β_Voc × (Tc − 25))
-    """)
+    st.info("Formula: Voc(Tc) = Voc₀ + β_Voc × (Tc − 25)")
 
-    # Небольшая справочная таблица
-    st.markdown("### Параметры расчёта")
+    st.markdown("### Calculation Parameters")
     ref = {
-        "Параметр": ["Voc при STC", "β_Voc", "Расчётная низкая температура", "Модулей в стринге", "Итоговый String Voc"],
-        "Значение": [f"{Voc0} V", f"{beta_voc} V/°C", f"{Tc_fixed} °C", modules_in_string, f"{Voc_string:.1f} V"]
+        "Parameter": ["Voc at STC", "β_Voc", "Design Low Tc", "Modules in String", "Resulting String Voc"],
+        "Value": [f"{Voc0} V", f"{beta_voc} V/°C", f"{Tc_fixed} °C", modules_in_string, f"{Voc_string:.1f} V"]
     }
     st.table(pd.DataFrame(ref))
 
-# ==================== ОПИСАНИЕ МОДЕЛИ (динамическое) ====================
+# ==================== DYNAMIC DESCRIPTION ====================
 st.markdown("---")
-with st.expander("📘 Описание модели и формулы", expanded=False):
+with st.expander("📘 Model Description & Equations", expanded=False):
 
     if model_choice == "Sandia SAPM Model":
-        st.markdown("### Sandia SAPM Model (полная)")
+        st.markdown("### Sandia SAPM Model")
         st.latex(r"V_{oc} = V_{oc0} + N_s \cdot \delta \cdot \ln\left(\frac{E_e}{1000}\right) + \beta_{Voc} \cdot (T_c - 25)")
-        st.markdown("Используется полная модель Sandia с учётом иррадиации и температуры.")
+        st.markdown("Full empirical model including both irradiance and temperature effects.")
 
     else:
-        st.markdown("### Simple Temperature Correction (простая модель)")
-        st.latex(r"V_{oc}(T_c) = V_{oc0} \times (1 + \beta_{Voc} \times (T_c - 25))")
-        st.markdown("""
-        Классическая линейная коррекция по температуре.  
-        Используется в большинстве руководств по sizing стрингов.
-        """)
+        st.markdown("### Simple Temperature Correction")
+        st.latex(r"V_{oc}(T_c) = V_{oc0} + \beta_{Voc} \times (T_c - 25)")
+        st.markdown("Standard linear temperature correction used in most string sizing guidelines.")
 
-st.caption("Две полностью разные модели | Полное обновление интерфейса при смене модели")
+st.caption("Two models | Fully dynamic | .PAN support | All in English")
