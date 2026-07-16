@@ -32,6 +32,17 @@ if uploaded_file:
     pan_params = parse_pan_file(uploaded_file)
     st.sidebar.success("PAN file loaded successfully!")
 
+# Calculation Model dropdown - НА САМОМ ВЕРХУ как ты просил
+st.sidebar.header("Calculation Model")
+model_choice = st.sidebar.selectbox(
+    "Choose calculation model",
+    options=["Sandia SAPM Model", "Simple Temperature Correction"],
+    index=0,
+    help="Sandia SAPM: Full empirical model with irradiance (ln) and temperature terms. Simple: Standard linear Voc temperature correction only."
+)
+
+st.sidebar.info("Note: Both models use the same Sandia temperature model to calculate cell temperature (Tc). The table shows realistic behavior across irradiance levels.")
+
 st.sidebar.header("Module Parameters")
 
 default_Voc0 = pan_params.get("Voc", 48.90)
@@ -70,35 +81,19 @@ else:
 
 st.sidebar.write(f"**a = {a}**, **b = {b}**")
 
-# NEW: Calculation Model dropdown
-st.sidebar.header("Calculation Model")
-model_choice = st.sidebar.selectbox(
-    "Choose calculation model",
-    options=["Sandia SAPM Model", "Simple Temperature Correction"],
-    index=0,
-    help="Sandia SAPM: Full empirical model with irradiance (ln) and temperature terms. Simple: Standard linear Voc temperature correction only."
-)
-
-st.sidebar.info("Note: Both models use the same Sandia temperature model to calculate cell temperature (Tc).")
-
-# ==================== CALCULATION (Updated with model choice) ====================
+# ==================== CALCULATION ====================
 irradiance = np.arange(50, 1001, 50)
 
 def calculate(Ee, model_choice):
-    # Module back-surface temperature (Sandia temp model - common for both)
     Tm = Tamb + (Ee / 1000) * np.exp(a + b * WS)
-    
-    # Cell temperature - irradiance dependent (more accurate)
-    delta_T = 2.0 * (Ee / 1000)          # 2.0°C at 1000 W/m²
+    delta_T = 2.0 * (Ee / 1000)
     Tc = Tm + delta_T
     
     if model_choice == "Sandia SAPM Model":
-        # Full Sandia SAPM Voc equation
         Ee_norm = Ee / 1000.0
         delta = 1.0 * (1.380649e-23 / 1.60217662e-19) * (Tc + 273.15)
         Voc_mod = Voc0 + Ns * delta * np.log(Ee_norm) + beta_voc * (Tc - 25)
     else:
-        # Simple Temperature Correction model
         Voc_mod = Voc0 * (1 + beta_voc * (Tc - 25))
     
     return round(Tc, 2), round(Voc_mod, 2)
@@ -115,7 +110,7 @@ for Ee in irradiance:
 
 df = pd.DataFrame(results)
 
-# ==================== RESULTS (Dynamic based on model) ====================
+# ==================== RESULTS (полностью динамические) ====================
 st.subheader(f"📊 Results Table ({model_choice})")
 st.dataframe(df, use_container_width=True, hide_index=True)
 
@@ -138,7 +133,7 @@ with col2:
     st.download_button("📥 Download Excel", output.getvalue(), "sandia_voc_results.xlsx", 
                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-# ==================== GRAPHS (Dynamic titles) ====================
+# ==================== GRAPHS ====================
 st.subheader("📈 Graphs")
 col1, col2 = st.columns(2)
 with col1:
@@ -150,7 +145,7 @@ with col2:
                    title=f"String Voc vs Irradiance ({model_choice})", markers=True, color_discrete_sequence=["red"])
     st.plotly_chart(fig2, use_container_width=True)
 
-# ==================== MODEL DESCRIPTION (Dynamic based on choice) ====================
+# ==================== MODEL DESCRIPTION (полностью динамическое) ====================
 st.markdown("---")
 with st.expander("📘 Model Description, Equations & Assumptions", expanded=False):
 
@@ -213,11 +208,15 @@ with st.expander("📘 Model Description, Equations & Assumptions", expanded=Fal
         """)
 
         st.markdown("""
-        This is the standard linear temperature correction model commonly used in basic string sizing calculations and many engineering tools. 
-        It applies only the temperature coefficient to Voc at STC, without the additional irradiance (ln) term from the full Sandia SAPM.
+        This is the **standard linear temperature correction** model used in most basic string sizing calculations and inverter manufacturer tools.
+        
+        **Why the irradiance table is still shown even in Simple mode?**  
+        Even with the simple Voc formula we still calculate realistic cell temperature (Tc) for each irradiance level using the Sandia temperature model. 
+        This gives you a more accurate picture of how Voc behaves under real conditions (Tc changes with irradiance and wind). 
+        The table is useful to see the variation across operating conditions.
         """)
 
-        st.markdown("**Source:** Standard PV engineering practice (e.g., IEC 62548, many inverter/string sizing guidelines)")
+        st.markdown("**Source:** Standard PV engineering practice (IEC 62548, manufacturer string sizing guidelines)")
 
     st.markdown("### 3. Key Assumptions & Justifications")
 
