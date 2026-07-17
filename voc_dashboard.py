@@ -160,11 +160,12 @@ else:
     }
     st.table(pd.DataFrame(ref))
 
-# DYNAMIC DESCRIPTION - FULL CONSISTENT STRUCTURE
+# ==================== DYNAMIC DESCRIPTION (РАЗНЫЕ ДЛЯ КАЖДОЙ МОДЕЛИ) ====================
 st.markdown("---")
 with st.expander("📘 Model Description & Equations", expanded=False):
 
     if model_choice == "Sandia SAPM Model":
+        # ==================== ПОЛНОЕ ОПИСАНИЕ ДЛЯ SANDIA ====================
         st.markdown("### 1. Cell Temperature Model (Sandia SAPM)")
 
         st.latex(r"""
@@ -195,67 +196,67 @@ with st.expander("📘 Model Description & Equations", expanded=False):
 
         st.markdown("**Source:** [pvlib.pvsystem.sapm](https://pvlib-python.readthedocs.io/en/stable/reference/generated/pvlib.pvsystem.sapm.html)")
 
-    else:
-        st.markdown("### 1. Cell Temperature Model (Sandia - used for realistic Tc)")
+        st.markdown("### 3. Key Assumptions & Justifications")
 
-        st.latex(r"""
-        T_m = T_{amb} + \frac{E_e}{1000} \cdot \exp(a + b \cdot WS)
-        """)
+        assumptions = {
+            "Parameter": [
+                "Diode ideality factor (n)",
+                "Cell vs Module ΔT at 1000 W/m²",
+                "Temperature model coefficients (a, b)",
+                "Wind speed for cold condition",
+                "Irradiance range"
+            ],
+            "Value": [
+                "1.0",
+                "2.0 °C (irradiance dependent)",
+                "Open Rack: a = -3.56, b = -0.075\nGlass/Glass: a = -3.47, b = -0.0594",
+                "1.0 m/s (user adjustable)",
+                "50 – 1000 W/m² (step 50)"
+            ],
+            "Justification": [
+                "Standard engineering simplification used in Sandia Voc calculations for string sizing",
+                "Reasonable value for glass/glass bifacial modules. ΔT now varies with irradiance (more accurate)",
+                "Recommended values from pvlib for ground-mounted single-axis tracker systems",
+                "Conservative low-wind assumption commonly used for cold-temperature Voc analysis",
+                "Covers typical operating range relevant for string voltage sizing"
+            ]
+        }
 
-        st.markdown("**Cell temperature** (irradiance-dependent):")
-
-        st.latex(r"""
-        T_c = T_m + \Delta T_0 \cdot \frac{E_e}{1000}
-        """)
+        st.table(pd.DataFrame(assumptions))
 
         st.markdown("""
-        Even in the Simple model we use the Sandia temperature model to calculate realistic cell temperature that changes with irradiance and wind.
+        **Primary References:**
+        - [pvlib-python Documentation](https://pvlib-python.readthedocs.io/)
+        - Sandia National Laboratories – *Photovoltaic Array Performance Model* (SAND2004-3535)
+        - King et al. (2004), *Sandia Array Performance Model*
         """)
 
-        st.markdown("**Source:** [pvlib.temperature.sapm_module](https://pvlib-python.readthedocs.io/en/stable/reference/generated/pvlib.temperature.sapm_module.html)")
-
-        st.markdown("### 2. Open-Circuit Voltage Model (Simple Temperature Correction)")
+    else:
+        # ==================== ОТДЕЛЬНОЕ ОПИСАНИЕ ДЛЯ SIMPLE MODEL ====================
+        st.markdown("### Simple Temperature Correction Model")
 
         st.latex(r"""
         V_{oc}(T_c) = V_{oc0} + \beta_{Voc} \times (T_c - 25)
         """)
 
-        st.markdown("Standard linear temperature correction used in most basic string sizing calculations and manufacturer guidelines.")
+        st.markdown("""
+        This is the **standard linear temperature correction** model used in the majority of string sizing calculations and inverter manufacturer recommendations.
 
-    st.markdown("### 3. Key Assumptions & Justifications")
+        **How it works:**
+        - We take Voc at Standard Test Conditions (STC)
+        - Apply the temperature coefficient to adjust it to the expected lowest cell temperature
+        - Multiply by the number of modules in the string
 
-    assumptions = {
-        "Parameter": [
-            "Diode ideality factor (n)",
-            "Cell vs Module ΔT at 1000 W/m²",
-            "Temperature model coefficients (a, b)",
-            "Wind speed for cold condition",
-            "Irradiance range"
-        ],
-        "Value": [
-            "1.0",
-            "2.0 °C (irradiance dependent)",
-            "Open Rack: a = -3.56, b = -0.075\nGlass/Glass: a = -3.47, b = -0.0594",
-            "1.0 m/s (user adjustable)",
-            "50 – 1000 W/m² (step 50)"
-        ],
-        "Justification": [
-            "Standard engineering simplification used in Sandia Voc calculations for string sizing",
-            "Reasonable value for glass/glass bifacial modules. ΔT now varies with irradiance (more accurate)",
-            "Recommended values from pvlib for ground-mounted single-axis tracker systems",
-            "Conservative low-wind assumption commonly used for cold-temperature Voc analysis",
-            "Covers typical operating range relevant for string voltage sizing"
-        ]
-    }
+        This model does **not** include irradiance dependence (the ln term), because for maximum Voc calculation in cold weather the temperature effect is dominant.
+        """)
 
-    st.table(pd.DataFrame(assumptions))
+        st.markdown("**Source:** IEC 62548, common PV engineering practice and manufacturer string sizing guidelines")
 
-    st.markdown("""
-    **Primary References:**
-    - [pvlib-python Documentation](https://pvlib-python.readthedocs.io/)
-    - Sandia National Laboratories – *Photovoltaic Array Performance Model* (SAND2004-3535)
-    - King et al. (2004), *Sandia Array Performance Model*
-    - Standard PV string sizing practices (IEC, manufacturer guidelines)
-    """)
+        st.markdown("### Key Parameters Used")
+        st.markdown("""
+        - `Voc₀` — Open circuit voltage at Standard Test Conditions  
+        - `β_Voc` — Temperature coefficient of Voc (taken from module datasheet or .PAN file)  
+        - `Design Low Cell Temperature` — The coldest temperature the modules are expected to reach
+        """)
 
 st.caption("Two models | Fully dynamic | .PAN support | All in English")
